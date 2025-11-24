@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/transcribe.js": {
+      "maxDuration": 60,
+      "maxMemory": 1024,
+      "bodyParser": false,
+      "sizeLimit": "25mb"
+    }
+  }
+}
