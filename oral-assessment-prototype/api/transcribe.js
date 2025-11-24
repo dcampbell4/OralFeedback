@@ -1,55 +1,44 @@
-// api/transcribe.js
-import fetch from "node-fetch";
-import FormData from "form-data";
+// /api/transcribe.js
+import { OpenAI } from "openai";
+
+export const config = {
+  api: {
+    bodyParser: false, // REQUIRED for file uploads
+  },
+};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    // In Vercel edge-like environment, the body isn't automatically parsed into form-data.
-    // We'll access the raw body via the node incoming message and reconstruct a FormData to send to OpenAI.
-    // If using Vercel Serverless (Node), you can access req.body if you use multer — but multer isn't included by default.
-    // Simpler approach: stream the incoming request into the OpenAI endpoint directly.
-    // NOTE: This approach works in environments where req is a Node IncomingMessage (serverless).
-    // If this doesn't work in your environment, replace this handler with a multer-based approach.
-
-    // Read the incoming raw buffer
+    // Read raw buffer from request
     const buffers = [];
     for await (const chunk of req) buffers.push(chunk);
-    const raw = Buffer.concat(buffers);
+    const audioBuffer = Buffer.concat(buffers);
 
-    // We'll forward the raw multipart body to OpenAI, but OpenAI requires proper multipart headers.
-    // Easiest reliable way: re-create form-data containing the file from the raw buffer.
-    // For demonstration, try to attach it as 'file' with content-type audio/webm
-    const form = new FormData();
-    form.append("file", raw, { filename: "speech.webm", contentType: "audio/webm" });
-    // specify model/language as needed
-    // As of OpenAI API: POST https://api.openai.com/v1/audio/transcriptions
-    const openaiRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-        // NOTE: DO NOT set content-type here; form-data sets it.
-      },
-      body: form
-    });
-
-    if (!openaiRes.ok) {
-      const txt = await openaiRes.text();
-      console.error("OpenAI transcription error:", openaiRes.status, txt);
-      return res.status(500).json({ error: "Transcription API error", details: txt });
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const parsed = await openaiRes.json();
-    // OpenAI returns { text: "..." } in some versions; adjust as necessary
-    const transcript = parsed.text || parsed.transcript || parsed.data || (parsed?.choices && parsed.choices[0]?.text) || "";
+    // OpenAI client
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
-    return res.status(200).json({ transcript });
+    // IMPORTANT: Whisper transcription using GPT-4o-transcribe
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioBuffer,
+      model: "gpt-4o-transcribe",
+      filename: "audio.webm",
+    });
+
+    return res.status(200).json({
+      transcript: transcription.text,
+    });
   } catch (err) {
-    console.error("transcribe handler error:", err);
+    console.error("TRANSCRIBE ERROR:", err);
     return res.status(500).json({ error: err.message || "Transcription failed" });
   }
 }
