@@ -1,8 +1,10 @@
 {
   "functions": {
-    "api/transcribe.js": {
+    "api/*.js": {
+      "runtime": "nodejs18.x",
       "maxDuration": 60,
-      "sizeLimit": "25mb"
+      "memory": 1024,
+      "maxAllowedSize": "20mb"
     }
   }
 }
