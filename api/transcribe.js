@@ -1,45 +1,52 @@
 // /api/transcribe.js
 import { OpenAI } from "openai";
 
-export default async function handler(req, res) {
+export const config = {
+  runtime: "nodejs20.x",
+  maxDuration: 60,
+  memory: 1024
+};
+
+export default async function handler(req) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 
   try {
-    // Read raw data from request
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const buffer = Buffer.concat(chunks);
-
-    if (!buffer || buffer.length === 0) {
-      return res.status(400).json({ error: "Missing audio data" });
+    // Receive audio as ArrayBuffer
+    const arrayBuffer = await req.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      return new Response(JSON.stringify({ error: "No audio received" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
-    // Convert buffer → File (required by OpenAI SDK)
-    const audioFile = new File([buffer], "audio.webm", {
-      type: "audio/webm",
+    // Convert to File object required by OpenAI
+    const audioFile = new File([arrayBuffer], "audio.webm", {
+      type: "audio/webm"
     });
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // Whisper transcription
-    const result = await openai.audio.transcriptions.create({
+    const output = await openai.audio.transcriptions.create({
       file: audioFile,
-      model: "gpt-4o-transcribe",
+      model: "gpt-4o-transcribe"
     });
 
-    return res.status(200).json({
-      transcript: result.text,
-    });
+    return new Response(
+      JSON.stringify({ transcript: output.text }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
 
-  } catch (error) {
-    console.error("TRANSCRIBE ERROR:", error);
-    return res.status(500).json({
-      error: "Transcription failed",
-      detail: error.message,
-    });
+  } catch (err) {
+    console.error("TRANSCRIPTION ERROR:", err);
+    return new Response(
+      JSON.stringify({ error: "Transcription failed", detail: err.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
