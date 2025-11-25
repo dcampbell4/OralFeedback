@@ -1,32 +1,30 @@
-// /api/transcribe.js
 import { OpenAI } from "openai";
 
-// Vercel Modern Functions use this format
-export const config = {
-  runtime: "nodejs"
-};
+export const config = { runtime: "nodejs" };
 
 export default async function handler(req) {
+  console.log("REQ METHOD:", req.method);
+  console.log("CONTENT TYPE:", req.headers.get("content-type"));
+  console.log("API KEY EXISTS:", !!process.env.OPENAI_API_KEY);
+
   if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }), 
-      { status: 405, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405
+    });
   }
 
   try {
-    // Read binary audio from request
     const arrayBuffer = await req.arrayBuffer();
+    console.log("AUDIO BYTES:", arrayBuffer.byteLength);
+
     if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-      return new Response(
-        JSON.stringify({ error: "No audio provided" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No audio received" }), {
+        status: 400
+      });
     }
 
-    // Convert ArrayBuffer → File (OpenAI SDK requires File or Blob)
     const audioFile = new File([arrayBuffer], "audio.webm", {
-      type: "audio/webm"
+      type: req.headers.get("content-type") || "audio/webm"
     });
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -36,16 +34,14 @@ export default async function handler(req) {
       model: "gpt-4o-transcribe"
     });
 
-    return new Response(
-      JSON.stringify({ transcript: result.text }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ transcript: result.text }), {
+      status: 200
+    });
 
-  } catch (error) {
-    console.error("TRANSCRIBE ERROR:", error);
-    return new Response(
-      JSON.stringify({ error: "Transcription failed", detail: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+  } catch (err) {
+    console.error("TRANSCRIBE ERROR:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500
+    });
   }
 }
